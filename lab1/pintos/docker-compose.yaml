@@ -7,7 +7,7 @@ services:
     stdin_open: true  
     tty: true         
     restart: no       
-    volumes:
-      - /Users/lsy1205/Desktop/OS/lab/lab1/pintos:/home/pintos
+    #volumes:
+    # - [your_source_code_path]:/home/pintos
     environment:
       - PINTOS_DIR=/home/pintos
