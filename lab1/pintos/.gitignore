@@ -3,4 +3,3 @@ cscope.out
 TAGS
 tags
 **/*.o
-docker-compose.yaml
