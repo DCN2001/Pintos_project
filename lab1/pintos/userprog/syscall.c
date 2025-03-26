@@ -41,7 +41,7 @@ void sys_close(struct intr_frame* f);
 
 static void (*syscalls[MAX_SYSCALL])(struct intr_frame *) = {
   [SYS_HALT] = sys_halt,
-  // [SYS_EXIT] = sys_exit,
+  [SYS_EXIT] = sys_exit,
   // [SYS_EXEC] = sys_exec,
   // [SYS_WAIT] = sys_wait,
   // [SYS_CREATE] = sys_create,
@@ -49,7 +49,7 @@ static void (*syscalls[MAX_SYSCALL])(struct intr_frame *) = {
   // [SYS_OPEN] = sys_open,
   // [SYS_FILESIZE] = sys_filesize,
   // [SYS_READ] = sys_read,
-  // [SYS_WRITE] = sys_write,
+  [SYS_WRITE] = sys_write,
   // [SYS_SEEK] = sys_seek,
   // [SYS_TELL] = sys_tell,
   // [SYS_CLOSE] = sys_close

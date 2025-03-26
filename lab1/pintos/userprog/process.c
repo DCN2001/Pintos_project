@@ -22,6 +22,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_argument(void **esp, char *cmdline);
+static void reverse(char *str);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -32,7 +33,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy, *fn_copy2;
   tid_t tid;
-
+  printf("in process_execute\n");
   /* Make a copy of FILE_NAME.
     Otherwise there's a race between the caller and load(). */
   fn_copy = malloc(strlen(file_name)+1);
@@ -48,13 +49,18 @@ process_execute (const char *file_name)
   char *save_ptr;
   fn_copy = strtok_r(fn_copy, " ", &save_ptr);
 
+  printf("=================\n");
+  printf("fn_copy: %s\n", fn_copy);
   tid = thread_create(fn_copy, PRI_DEFAULT, start_process, fn_copy2);
+  printf("tid: %d\n", tid);
   free(fn_copy);
 
   if (tid == TID_ERROR){
+    printf("tid error\n");
     free (fn_copy2); 
     return TID_ERROR;
   }
+  printf("RRRReturn tid\n");
 
   return tid;
 }
@@ -62,13 +68,39 @@ process_execute (const char *file_name)
 // lab01 Hint - This is the mainly function you have to trace.
 static void push_argument(void **esp, char *cmdline)
 {
+  printf("cmdline: %s\n", cmdline);
+  *esp = 0xbffffe7c;
+  printf("cmdline: %s\n", cmdline);
+  char *temp, *save_ptr;
+  reverse(cmdline);
 
+  cmdline = strtok_r(cmdline, " ", &save_ptr);
+  temp = strtok_r(NULL, " ", &save_ptr);
+  while( temp != NULL){
+    reverse(cmdline);
+    *--esp = *cmdline;
+    cmdline = temp;
+    temp = strtok_r(NULL, " ", &save_ptr);
+  }
+}
+
+static void reverse(char *str)
+{
+  int i, j;
+  char temp;
+  for(i = 0, j = strlen(str) - 1; i < j; i++, j--)
+  {
+    temp = str[i];
+    str[i] = str[j];
+    str[j] = temp;
+  }
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void start_process (void *file_name_)
 {
+  printf("in start_process\n");
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -86,6 +118,7 @@ static void start_process (void *file_name_)
   char *save_ptr;
   file_name = strtok_r(file_name, " ", &save_ptr);
   success = load (file_name, &if_.eip, &if_.esp);
+  printf("success: %d\n", success);
   if(success)
   {
     push_argument (&if_.esp, fn_copy);
@@ -241,13 +274,15 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
+  printf("in load\n");
+  printf("*********\n");
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
   int i;
-
+  printf("file_name: %s\n", file_name);
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
