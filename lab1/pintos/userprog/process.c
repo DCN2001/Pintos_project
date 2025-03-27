@@ -33,7 +33,9 @@ process_execute (const char *file_name)
 {
   char *fn_copy, *fn_copy2;
   tid_t tid;
-  printf("in process_execute\n");
+  struct thread *child = NULL;
+
+  // printf("in process_execute\n");
   /* Make a copy of FILE_NAME.
     Otherwise there's a race between the caller and load(). */
   fn_copy = malloc(strlen(file_name)+1);
@@ -49,18 +51,32 @@ process_execute (const char *file_name)
   char *save_ptr;
   fn_copy = strtok_r(fn_copy, " ", &save_ptr);
 
-  printf("=================\n");
-  printf("fn_copy: %s\n", fn_copy);
+  // printf("=================\n");
+  // printf("fn_copy: %s\n", fn_copy);
   tid = thread_create(fn_copy, PRI_DEFAULT, start_process, fn_copy2);
-  printf("tid: %d\n", tid);
+  // printf("tid: %d\n", tid);
   free(fn_copy);
 
   if (tid == TID_ERROR){
-    printf("tid error\n");
+    // printf("tid error\n");
     free (fn_copy2); 
     return TID_ERROR;
+  } else{
+    child = get_thread_by_tid (tid);
   }
-  printf("RRRReturn tid\n");
+
+  if (child != NULL) {
+    // printf("====\nCHILD\n");
+    list_push_back (&thread_current()->children, &child->childelem);
+    // printf(">>>>>>\n");
+    sema_down (&child->load_sema);
+    if(child->load_success == -1) {
+      // printf("load success -1\n");
+      tid = TID_ERROR;
+    }
+  }
+
+  // printf("RRRReturn tid\n");
 
   return tid;
 }
@@ -70,7 +86,7 @@ static void push_argument(void **esp, char *cmdline)
 {
   printf("cmdline: %s\n", cmdline);
   *esp = 0xbffffe7c;
-  printf("cmdline: %s\n", cmdline);
+  // printf("cmdline: %s\n", cmdline);
   char *temp, *save_ptr;
   reverse(cmdline);
 
@@ -100,9 +116,9 @@ static void reverse(char *str)
    running. */
 static void start_process (void *file_name_)
 {
-  printf("in start_process\n");
   char *file_name = file_name_;
   struct intr_frame if_;
+  struct thread *t = thread_current ();
   bool success;
 
   char *fn_copy = malloc(strlen(file_name) + 1);
@@ -118,13 +134,18 @@ static void start_process (void *file_name_)
   char *save_ptr;
   file_name = strtok_r(file_name, " ", &save_ptr);
   success = load (file_name, &if_.eip, &if_.esp);
-  printf("success: %d\n", success);
+  // printf("success: %d\n", success);
   if(success)
   {
+    // printf("push_argument\n");
     push_argument (&if_.esp, fn_copy);
+    sema_up (&t->load_sema);
   }else
   {
     /* If load failed, quit. */
+    // printf("load failed\n");
+    t->load_success = -1;
+    sema_up (&t->load_sema);
     thread_exit ();
   }
 
@@ -162,11 +183,45 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  struct thread *child = NULL;
+  struct list_elem *e;
   uint32_t *pd;
+
+  // struct openfile *of = NULL;
+  // if(lock_held_by_current_thread(&filesys_lock))
+  //   lock_release (&filesys_lock);
+  
+  // of = getFile (2);
+  // if (of != NULL) {
+  //   lock_acquire (&filesys_lock);
+  //   file_close (of->file);
+  //   lock_release (&filesys_lock);
+  //   list_remove (&of->elem);
+  //   palloc_free_page (of);
+  // }
+
+  if(cur->cmd != NULL)
+    printf("%s: exit(%d)\n", cur->cmd, cur->exit_status);
+
+  sema_up (&cur->wait_sema);
+
+  for (e = list_begin (&cur->children); e != list_end (&cur->children);
+       e = list_next (e))
+    {
+      child = list_entry (e, struct thread, childelem);
+      sema_down (&child->wait_sema);
+      sema_up (&child->exit_sema);
+    }
+
+
+  /* wait for parent to reap */
+  sema_down (&cur->exit_sema);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
+  palloc_free_page (cur->cmd);
+
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -274,15 +329,15 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
-  printf("in load\n");
-  printf("*********\n");
+  // printf("in load\n");
+  // printf("*********\n");
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
   int i;
-  printf("file_name: %s\n", file_name);
+  // printf("file_name: %s\n", file_name);
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
