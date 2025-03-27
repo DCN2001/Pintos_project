@@ -5,6 +5,9 @@
 #include "threads/thread.h"
 
 #include <devices/shutdown.h>
+#include "threads/synch.h"
+#include "userprog/pagedir.h"
+#include "userprog/process.h"
 
 #include <string.h>
 #include <filesys/file.h>
@@ -17,27 +20,30 @@
 #include <filesys/filesys.h>
 
 #define MAX_SYSCALL 20
+#define BUF_MAX 200
 
 // lab01 Hint - Here are the system calls you need to implement.
 
 /* System call for process. */
-
-void sys_halt(void);
-void sys_exit(struct intr_frame* f);
-void sys_exec(struct intr_frame* f);
-void sys_wait(struct intr_frame* f);
+struct lock filesys_lock;
+void  sys_halt(void);
+void  sys_exit(int status);
+pid_t sys_exec(const char *cmdline);
+int   sys_wait(pid_t pid);
 
 /* System call for file. */
-void sys_create(struct intr_frame* f);
-void sys_remove(struct intr_frame* f);
-void sys_open(struct intr_frame* f);
-void sys_filesize(struct intr_frame* f);
-void sys_read(struct intr_frame* f);
-void sys_write(struct intr_frame* f);
-void sys_seek(struct intr_frame* f);
-void sys_tell(struct intr_frame* f);
-void sys_close(struct intr_frame* f);
+bool     sys_create(const char *file, unsigned initial_size);
+bool     sys_remove(const char *file);
+int      sys_open(const char *file);
+int      sys_filesize(int fd);
+int      sys_read(int fd, void *buffer, unsigned size);
+int      sys_write(int fd, const void *buffer, unsigned size);
+void     sys_seek(int fd, unsigned position);
+unsigned sys_tell(int fd);
+void     sys_close(int fd);
 
+static bool valid_mem_access (const void *);
+static struct openfile * getFile (int);
 
 static void (*syscalls[MAX_SYSCALL])(struct intr_frame *) = {
   [SYS_HALT] = sys_halt,
@@ -60,8 +66,24 @@ static void syscall_handler (struct intr_frame *);
 void syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&filesys_lock);
 }
 
+/* Verify that the user pointer is valid */
+static bool
+valid_mem_access (const void *up)
+{
+	struct thread *t = thread_current ();
+
+	if (up == NULL)
+		return false;
+  if (is_kernel_vaddr (up))
+    return false;
+  if (pagedir_get_page (t->pagedir, up) == NULL)
+   	return false;
+  
+	return true;
+}
 
 /* System Call: void halt (void)
     Terminates Pintos by calling shutdown_power_off() (declared in devices/shutdown.h). 
@@ -73,6 +95,94 @@ void sys_halt(void)
 
 static void syscall_handler (struct intr_frame *f UNUSED) 
 {
-  printf ("system call!\n");
+  // printf ("system call!\n");
+  void *esp = f->esp;
+  uint32_t *eax = &f->eax;
+  int syscall_num;
+  
+  if(!valid_mem_access ( ((int *) esp) ))
+    sys_exit (-1);
+  if(!valid_mem_access ( ((int *) esp)+1 ))
+    sys_exit (-1);
+  syscall_num = *((int *) esp);
+
+  if (syscall_num >= 0 && syscall_num < MAX_SYSCALL) {
+      switch (syscall_num){
+        case SYS_EXIT:{
+          int status = *(((int *) esp) + 1);
+          sys_exit(status);
+          break;
+        }
+
+        case SYS_WRITE:{
+          int fd = *(((int *) esp) + 1);
+          const void *buffer = (void *) *(((int **) esp) + 2);
+          unsigned size = *(((unsigned *) esp) + 3);
+          // printf("buffer: %s\n", buffer);
+
+          *eax = (uint32_t) sys_write (fd, buffer, size);
+          break;
+        }
+      }
+
+      // printf("syscall_num: %d\n", syscall_num);
+      // syscalls[syscall_num](f);
+  } else {
+      sys_exit(-1);
+  }
+  // thread_exit();
+}
+
+void sys_exit(int status){
+  struct thread *cur = thread_current();
+  cur->exit_status = status;
   thread_exit();
+}
+
+int sys_write(int fd, const void *buffer, unsigned size){
+  // printf("in sys_write\n");
+  int bytes_written = 0;
+  char *bufChar = NULL;
+  struct openfile *of = NULL;
+	if (!valid_mem_access(buffer)){
+    printf("invalid mem access\n");
+		sys_exit (-1);
+  }
+  bufChar = (char *)buffer;
+  if(fd == 1) {
+    /* break up large buffers */
+    while(size > BUF_MAX) {
+      putbuf(bufChar, BUF_MAX);
+      bufChar += BUF_MAX;
+      size -= BUF_MAX;
+      bytes_written += BUF_MAX;
+    }
+    putbuf(bufChar, size);
+    bytes_written += size;
+    return bytes_written;
+  }
+  else {
+    of = getFile (fd);
+    if (of == NULL)
+      return 0;
+    lock_acquire (&filesys_lock);
+    bytes_written = file_write (of->file, buffer, size);
+    lock_release (&filesys_lock);
+    return bytes_written;
+  }
+}
+
+static struct openfile *
+getFile (int fd)
+{
+  struct thread *t = thread_current ();
+  struct list_elem *e;
+  for (e = list_begin (&t->openfiles); e != list_end (&t->openfiles);
+       e = list_next (e))
+    {
+      struct openfile *of = list_entry (e, struct openfile, elem);
+      if(of->fd == fd)
+        return of;
+    }
+  return NULL;
 }

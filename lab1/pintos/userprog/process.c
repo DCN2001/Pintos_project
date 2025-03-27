@@ -22,7 +22,6 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void push_argument(void **esp, char *cmdline);
-static void reverse(char *str);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -84,33 +83,63 @@ process_execute (const char *file_name)
 // lab01 Hint - This is the mainly function you have to trace.
 static void push_argument(void **esp, char *cmdline)
 {
-  printf("cmdline: %s\n", cmdline);
-  *esp = 0xbffffe7c;
-  // printf("cmdline: %s\n", cmdline);
-  char *temp, *save_ptr;
-  reverse(cmdline);
-
-  cmdline = strtok_r(cmdline, " ", &save_ptr);
-  temp = strtok_r(NULL, " ", &save_ptr);
-  while( temp != NULL){
-    reverse(cmdline);
-    *--esp = *cmdline;
-    cmdline = temp;
-    temp = strtok_r(NULL, " ", &save_ptr);
+  char *token, *save_ptr;
+  char **tokens = palloc_get_page (0);
+  int i = 0;
+  int tokensLen = 0;
+  char *espChar;
+  uint8_t word_align = 0;
+  // printf("%#x\n",*esp);
+  // printf("\n:)))))))))))))\n"); 
+  for (token = strtok_r (cmdline, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr)) {
+    if(i == 0) {
+      thread_current()->cmd = palloc_get_page (0);
+      strlcpy(thread_current()->cmd, token, strlen(token)+1);
+    }
+    tokens[i] = token;
+    i++;
   }
+
+  espChar = (char *) *esp;
+  /* push arguments onto the stack from right to left */
+  int j, len;
+  for (j = i; j > 0; j--) {
+    len = strlen(tokens[j-1]);
+    tokensLen += len + 1;
+    espChar -= len + 1;
+    strlcpy(espChar, tokens[j-1], len+1);
+    tokens[j-1] = espChar;
+  }
+  /* word_align */
+  tokensLen = 4 - (tokensLen % 4);
+  for (j = 0; j < tokensLen; j++) {
+    espChar--;
+    *espChar = word_align;
+  }
+  /* add zero char pointer */
+  espChar -= 4;
+  *espChar = 0;
+  /* add pointers to arguments on stack */
+  for (j = i; j > 0; j--) {
+    espChar -= 4;
+    *((int *)espChar) = (unsigned)tokens[j-1];
+  }
+  /* put argv onto the stack */
+  void *tmp = espChar;
+  espChar -= 4;
+  *((int *)espChar) = (unsigned)tmp;
+  /* put argc onto the stack */
+  espChar -= 4;
+  *espChar = i;
+  espChar -= 4;
+  *espChar = 0;
+  /* move esp to bottom of stack */
+  *esp = espChar;
+
+  palloc_free_page (tokens);
 }
 
-static void reverse(char *str)
-{
-  int i, j;
-  char temp;
-  for(i = 0, j = strlen(str) - 1; i < j; i++, j--)
-  {
-    temp = str[i];
-    str[i] = str[j];
-    str[j] = temp;
-  }
-}
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -172,11 +201,34 @@ static void start_process (void *file_name_)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
-   int
-   process_wait (tid_t child_tid UNUSED) 
-   {
-     return -1;
-   }
+  int
+  process_wait (tid_t child_tid UNUSED) 
+  {
+    int exit_status;
+    struct thread *t = thread_current ();
+    struct thread *child = NULL;
+    struct list_elem *e;
+
+    /* Get child whose tid is tid if one exists */
+    for (e = list_begin (&t->children); e != list_end (&t->children);
+        e = list_next (e))
+      {
+        child = list_entry (e, struct thread, childelem);
+        if(child->tid == child_tid)
+          break;
+      }
+    if (e == list_end (&t->children))
+      return -1;
+    list_remove (&child->childelem);
+
+    sema_down (&child->wait_sema);
+
+    exit_status = child->exit_status;
+
+    sema_up (&child->exit_sema);
+
+    return exit_status;
+  }
 
 /* Free the current process's resources. */
 void
