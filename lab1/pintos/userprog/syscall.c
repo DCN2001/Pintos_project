@@ -48,17 +48,17 @@ static struct openfile * getFile (int);
 static void (*syscalls[MAX_SYSCALL])(struct intr_frame *) = {
   [SYS_HALT] = sys_halt,
   [SYS_EXIT] = sys_exit,
-  // [SYS_EXEC] = sys_exec,
-  // [SYS_WAIT] = sys_wait,
-  // [SYS_CREATE] = sys_create,
-  // [SYS_REMOVE] = sys_remove,
-  // [SYS_OPEN] = sys_open,
-  // [SYS_FILESIZE] = sys_filesize,
-  // [SYS_READ] = sys_read,
+  [SYS_EXEC] = sys_exec,
+  [SYS_WAIT] = sys_wait,
+  [SYS_CREATE] = sys_create,
+  [SYS_REMOVE] = sys_remove,
+  [SYS_OPEN] = sys_open,
+  [SYS_FILESIZE] = sys_filesize,
+  [SYS_READ] = sys_read,
   [SYS_WRITE] = sys_write,
-  // [SYS_SEEK] = sys_seek,
-  // [SYS_TELL] = sys_tell,
-  // [SYS_CLOSE] = sys_close
+  [SYS_SEEK] = sys_seek,
+  [SYS_TELL] = sys_tell,
+  [SYS_CLOSE] = sys_close
 };
 
 static void syscall_handler (struct intr_frame *);
@@ -85,14 +85,6 @@ valid_mem_access (const void *up)
 	return true;
 }
 
-/* System Call: void halt (void)
-    Terminates Pintos by calling shutdown_power_off() (declared in devices/shutdown.h). 
-*/
-void sys_halt(void)
-{
-  shutdown_power_off();
-}
-
 static void syscall_handler (struct intr_frame *f UNUSED) 
 {
   // printf ("system call!\n");
@@ -108,19 +100,76 @@ static void syscall_handler (struct intr_frame *f UNUSED)
 
   if (syscall_num >= 0 && syscall_num < MAX_SYSCALL) {
       switch (syscall_num){
+        case SYS_HALT:{
+          sys_halt();
+          break;
+        }
         case SYS_EXIT:{
           int status = *(((int *) esp) + 1);
           sys_exit(status);
           break;
         }
-
-        case SYS_WRITE:{
+        case SYS_EXEC:{
+          const char *cmd_line = *(((char **) esp) + 1);
+  	      *eax = (uint32_t) sys_exec (cmd_line);
+          break;
+        }
+        case SYS_WAIT: {
+          pid_t pid = *(((pid_t *) esp) + 1);
+  	      *eax = (uint32_t) sys_wait (pid);
+          break;
+        }
+        case SYS_CREATE: {
+          const char *file = *(((char **) esp) + 1);
+  	      unsigned initial_size = *(((unsigned *) esp) + 2);
+  	      *eax = (uint32_t) sys_create (file, initial_size);
+          break;
+        }
+        case SYS_REMOVE: {
+          const char *file = *(((char **) esp) + 1);
+  	      *eax = (uint32_t) sys_remove (file);
+          break;
+        }
+        case SYS_OPEN: {
+          const char *file = *(((char **) esp) + 1);
+  	      *eax = (uint32_t) sys_open (file);
+          break;
+        }
+        case SYS_FILESIZE: {
+          int fd = *(((int *) esp) + 1);
+  	      *eax = (uint32_t) sys_filesize (fd);
+          break;
+        }
+        case SYS_READ: {
+          int fd = *(((int *) esp) + 1);
+  	      void *buffer = (void *) *(((int **) esp) + 2);
+  	      unsigned size = *(((unsigned *) esp) + 3);
+  	      *eax = (uint32_t) sys_read (fd, buffer, size);
+          break;
+        }
+        case SYS_WRITE: {
           int fd = *(((int *) esp) + 1);
           const void *buffer = (void *) *(((int **) esp) + 2);
           unsigned size = *(((unsigned *) esp) + 3);
           // printf("buffer: %s\n", buffer);
 
           *eax = (uint32_t) sys_write (fd, buffer, size);
+          break;
+        }
+        case SYS_SEEK: {
+          int fd = *(((int *) esp) + 1);
+          unsigned position = *(((unsigned *) esp) + 2);
+          sys_seek (fd, position);
+          break;
+        }
+        case SYS_TELL: {
+          int fd = *(((int *) esp) + 1);
+  	      *eax = (uint32_t) sys_tell (fd);
+          break;
+        }
+        case SYS_CLOSE: {
+          int fd = *(((int *) esp) + 1);
+  	      sys_close (fd);
           break;
         }
       }
@@ -133,10 +182,117 @@ static void syscall_handler (struct intr_frame *f UNUSED)
   // thread_exit();
 }
 
+/* System Call: void halt (void)
+    Terminates Pintos by calling shutdown_power_off() (declared in devices/shutdown.h). 
+*/
+void sys_halt(void)
+{
+  shutdown_power_off();
+}
+
 void sys_exit(int status){
   struct thread *cur = thread_current();
   cur->exit_status = status;
   thread_exit();
+}
+
+pid_t sys_exec(const char *cmdline){
+  tid_t child_tid = TID_ERROR;
+
+  if(!valid_mem_access(cmdline))
+    sys_exit (-1);
+
+  child_tid = process_execute (cmdline);
+
+	return child_tid;
+}
+
+int sys_wait(pid_t pid){
+  return process_wait (pid);
+}
+
+bool sys_create(const char *file, unsigned initial_size){
+   bool retval;
+  if(valid_mem_access(file)) {
+    lock_acquire (&filesys_lock);
+    retval = filesys_create (file, initial_size);
+    lock_release (&filesys_lock);
+    return retval;
+  }
+	else
+    sys_exit (-1);
+
+  return false;
+}
+bool sys_remove(const char *file){
+  bool retval;
+	if(valid_mem_access(file)) {
+    lock_acquire (&filesys_lock);
+    retval = filesys_remove (file);
+    lock_release (&filesys_lock);
+    return retval;
+  }
+  else
+    sys_exit (-1);
+
+  return false;
+}
+
+int sys_open(const char *file){
+  if(valid_mem_access ((void *) file)) {
+    struct openfile *new = palloc_get_page (0);
+    new->fd = thread_current ()->next_fd;
+    thread_current ()->next_fd++;
+    lock_acquire (&filesys_lock);
+    new->file = filesys_open(file);
+    lock_release (&filesys_lock);
+    if (new->file == NULL)
+      return -1;
+    list_push_back(&thread_current ()->openfiles, &new->elem);
+    return new->fd;
+  }
+	else
+    sys_exit (-1);
+
+	return -1;
+}
+
+int sys_filesize(int fd){
+  int retval;
+  struct openfile *of = NULL;
+	of = getFile (fd);
+  if (of == NULL)
+    return 0;
+  lock_acquire (&filesys_lock);
+  retval = file_length (of->file);
+  lock_release (&filesys_lock);
+  return retval;
+}
+
+int sys_read(int fd, void *buffer, unsigned size){
+  int bytes_read = 0;
+  char *bufChar = NULL;
+  struct openfile *of = NULL;
+	if (!valid_mem_access(buffer))
+    sys_exit (-1);
+  bufChar = (char *)buffer;
+	if(fd == 0) {
+    while(size > 0) {
+      input_getc();
+      size--;
+      bytes_read++;
+    }
+    return bytes_read;
+  }
+  else {
+    of = getFile (fd);
+    if (of == NULL)
+      return -1;
+    lock_acquire (&filesys_lock);
+    bytes_read = file_read (of->file, buffer, size);
+    lock_release (&filesys_lock);
+    return bytes_read;
+  }
 }
 
 int sys_write(int fd, const void *buffer, unsigned size){
@@ -170,6 +326,40 @@ int sys_write(int fd, const void *buffer, unsigned size){
     lock_release (&filesys_lock);
     return bytes_written;
   }
+}
+
+void sys_seek(int fd, unsigned position){
+  struct openfile *of = NULL;
+  of = getFile (fd);
+  if (of == NULL)
+    return;
+  lock_acquire (&filesys_lock);
+  file_seek (of->file, position);
+  lock_release (&filesys_lock);
+}
+
+unsigned sys_tell(int fd) {
+  unsigned retval;
+	struct openfile *of = NULL;
+  of = getFile (fd);
+  if (of == NULL)
+    return 0;
+  lock_acquire (&filesys_lock);
+  retval = file_tell (of->file);
+  lock_release (&filesys_lock);
+  return retval;
+}
+
+void sys_close(int fd) {
+  struct openfile *of = NULL;
+  of = getFile (fd);
+  if (of == NULL)
+    return;
+  lock_acquire (&filesys_lock);
+  file_close (of->file);
+  lock_release (&filesys_lock);
+  list_remove (&of->elem);
+  palloc_free_page (of);
 }
 
 static struct openfile *
