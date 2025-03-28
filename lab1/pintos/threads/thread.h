@@ -99,6 +99,7 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
 
     struct list openfiles;              /* List of files currently opened by this thread. */
+    struct file *execfile;                    /* Executable file for this thread */
     struct list children;               /* List of child processes */
     struct list_elem childelem;         /* List element for parent's children list */
     int next_fd;                        /* The next file descriptor to use when opening a file. */

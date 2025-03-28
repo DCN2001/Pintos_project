@@ -176,6 +176,9 @@ static void start_process (void *file_name_)
   {
     // printf("push_argument\n");
     push_argument (&if_.esp, fn_copy);
+    t->execfile = filesys_open(file_name);
+    file_deny_write(t->execfile);
+
     sema_up (&t->load_sema);
   }else
   {
@@ -278,6 +281,11 @@ process_exit (void)
   if(cur->cmd != NULL)
     printf("%s: exit(%d)\n", cur->cmd, cur->exit_status);
 
+  if (cur->execfile != NULL)
+    {
+        file_allow_write(cur->execfile);
+        file_close(cur->execfile);
+    }
   sema_up (&cur->wait_sema);
 
   for (e = list_begin (&cur->children); e != list_end (&cur->children);
