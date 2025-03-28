@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "syscall.h"
+
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -37,10 +39,15 @@ process_execute (const char *file_name)
   // printf("in process_execute\n");
   /* Make a copy of FILE_NAME.
     Otherwise there's a race between the caller and load(). */
+  // printf(">>>>>>>>>>>>>>>>>>\n\n\n\n");
+  // printf("file_name: %s\n", file_name);
+  // printf("<<<<<<<<<<<<<<<<<<\n\n\n\n");
   fn_copy = malloc(strlen(file_name)+1);
   fn_copy2 = malloc(strlen(file_name)+1);
-  if (fn_copy == NULL)
+  if (fn_copy == NULL){
+    printf("fn_copy error\n");
     return TID_ERROR;
+  }
 
   strlcpy (fn_copy, file_name, strlen(file_name)+1);
   strlcpy (fn_copy2, file_name, strlen(file_name)+1);
@@ -69,6 +76,7 @@ process_execute (const char *file_name)
     list_push_back (&thread_current()->children, &child->childelem);
     // printf(">>>>>>\n");
     sema_down (&child->load_sema);
+    // printf("<<<<<<\n");
     if(child->load_success == -1) {
       // printf("load success -1\n");
       tid = TID_ERROR;
@@ -201,34 +209,49 @@ static void start_process (void *file_name_)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
-  int
-  process_wait (tid_t child_tid UNUSED) 
-  {
-    int exit_status;
-    struct thread *t = thread_current ();
-    struct thread *child = NULL;
-    struct list_elem *e;
+int
+process_wait (tid_t child_tid UNUSED) 
+{
+  int exit_status;
+  struct thread *t = thread_current ();
+  struct thread *child = NULL;
+  struct list_elem *e;
 
-    /* Get child whose tid is tid if one exists */
-    for (e = list_begin (&t->children); e != list_end (&t->children);
-        e = list_next (e))
-      {
-        child = list_entry (e, struct thread, childelem);
-        if(child->tid == child_tid)
-          break;
-      }
-    if (e == list_end (&t->children))
-      return -1;
-    list_remove (&child->childelem);
+  /* Get child whose tid is tid if one exists */
+  for (e = list_begin (&t->children); e != list_end (&t->children);
+      e = list_next (e))
+    {
+      child = list_entry (e, struct thread, childelem);
+      if(child->tid == child_tid)
+        break;
+    }
+  if (e == list_end (&t->children))
+    return -1;
+  list_remove (&child->childelem);
 
-    sema_down (&child->wait_sema);
+  sema_down (&child->wait_sema);
 
-    exit_status = child->exit_status;
+  exit_status = child->exit_status;
 
-    sema_up (&child->exit_sema);
+  sema_up (&child->exit_sema);
 
-    return exit_status;
-  }
+  return exit_status;
+}
+
+static struct openfile *
+getFile (int fd)
+{
+  struct thread *t = thread_current ();
+  struct list_elem *e;
+  for (e = list_begin (&t->openfiles); e != list_end (&t->openfiles);
+       e = list_next (e))
+    {
+      struct openfile *of = list_entry (e, struct openfile, elem);
+      if(of->fd == fd)
+        return of;
+    }
+  return NULL;
+}
 
 /* Free the current process's resources. */
 void
@@ -239,18 +262,18 @@ process_exit (void)
   struct list_elem *e;
   uint32_t *pd;
 
-  // struct openfile *of = NULL;
-  // if(lock_held_by_current_thread(&filesys_lock))
-  //   lock_release (&filesys_lock);
+  struct openfile *of = NULL;
+  if(lock_held_by_current_thread(&filesys_lock))
+    lock_release (&filesys_lock);
   
-  // of = getFile (2);
-  // if (of != NULL) {
-  //   lock_acquire (&filesys_lock);
-  //   file_close (of->file);
-  //   lock_release (&filesys_lock);
-  //   list_remove (&of->elem);
-  //   palloc_free_page (of);
-  // }
+  of = getFile (2);
+  if (of != NULL) {
+    lock_acquire (&filesys_lock);
+    file_close (of->file);
+    lock_release (&filesys_lock);
+    list_remove (&of->elem);
+    palloc_free_page (of);
+  }
 
   if(cur->cmd != NULL)
     printf("%s: exit(%d)\n", cur->cmd, cur->exit_status);

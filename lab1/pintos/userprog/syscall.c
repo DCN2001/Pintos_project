@@ -63,6 +63,10 @@ static void (*syscalls[MAX_SYSCALL])(struct intr_frame *) = {
 
 static void syscall_handler (struct intr_frame *);
 
+static int get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+
+
 void syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -81,7 +85,18 @@ valid_mem_access (const void *up)
     return false;
   if (pagedir_get_page (t->pagedir, up) == NULL)
    	return false;
-  
+  uint8_t *check_byteptr = (uint8_t *) up;
+  for (uint8_t i = 0; i < 4; i++) 
+  {
+    // printf("check_byteptr + i: %p\n", check_byteptr + i);
+    if (get_user(check_byteptr + i) == -1)
+    {
+      t -> exit_status = -1;
+      thread_exit();
+    }
+    // printf("%d\n\n", i);
+  }
+  // printf("valid_mem_access\n");
 	return true;
 }
 
@@ -91,12 +106,22 @@ static void syscall_handler (struct intr_frame *f UNUSED)
   void *esp = f->esp;
   uint32_t *eax = &f->eax;
   int syscall_num;
+
+  // printf(((int *) esp) );
+  // printf(is_user_vaddr(esp) ? "user\n" : "kernel\n");
   
   if(!valid_mem_access ( ((int *) esp) ))
     sys_exit (-1);
   if(!valid_mem_access ( ((int *) esp)+1 ))
     sys_exit (-1);
+
+  // if (!valid_mem_access (*(((char **) esp) + 1)))
+  //   sys_exit (-1);
+
+  // check_ptr2(esp+1);
   syscall_num = *((int *) esp);
+
+  // printf("syscall_num: %d\n", syscall_num);
 
   if (syscall_num >= 0 && syscall_num < MAX_SYSCALL) {
       switch (syscall_num){
@@ -110,7 +135,12 @@ static void syscall_handler (struct intr_frame *f UNUSED)
           break;
         }
         case SYS_EXEC:{
+          // printf("in SYS_EXEC\n");
+          // printf("\n");
+          // printf("esp: %p\n", esp);
+          
           const char *cmd_line = *(((char **) esp) + 1);
+
   	      *eax = (uint32_t) sys_exec (cmd_line);
           break;
         }
@@ -197,12 +227,21 @@ void sys_exit(int status){
 }
 
 pid_t sys_exec(const char *cmdline){
+  // printf("in sys_exec\n");
+  // printf("cmdline: %s\n", cmdline);
   tid_t child_tid = TID_ERROR;
 
   if(!valid_mem_access(cmdline))
+  {
+    // printf("invalid mem access\n");
     sys_exit (-1);
+  } else {
+    // printf("valid mem access\n");
+  }
 
+  // printf("cmdline: %s\n", cmdline);
   child_tid = process_execute (cmdline);
+  // printf("child_tid: %d\n", child_tid);
 
 	return child_tid;
 }
@@ -301,7 +340,7 @@ int sys_write(int fd, const void *buffer, unsigned size){
   char *bufChar = NULL;
   struct openfile *of = NULL;
 	if (!valid_mem_access(buffer)){
-    printf("invalid mem access\n");
+    // printf("invalid mem access\n");
 		sys_exit (-1);
   }
   bufChar = (char *)buffer;
@@ -375,4 +414,29 @@ getFile (int fd)
         return of;
     }
   return NULL;
+}
+
+
+/* Reads a byte at user virtual address UADDR.
+UADDR must be below PHYS_BASE.
+Returns the byte value if successful, -1 if a segfault
+occurred. */
+static int
+get_user (const uint8_t *uaddr)
+{
+  // printf("get_user\n");
+  int result;
+  asm ("movl $1f, %0; movzbl %1, %0; 1:" : "=&a" (result) : "m" (*uaddr));
+  // printf("result: %d\n", result);
+  return result;
+}
+/* Writes BYTE to user address UDST.
+UDST must be below PHYS_BASE.
+Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte)
+{
+  int error_code;
+  asm ("movl $1f, %0; movb %b2, %1; 1:" : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+  return error_code != -1;
 }
