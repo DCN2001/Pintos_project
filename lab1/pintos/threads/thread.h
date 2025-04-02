@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "filesys/file.h"
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -24,6 +26,12 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* Struct for maintaining the files a thread has opened */
+struct openfile {
+  struct list_elem elem;
+  int fd;
+  struct file *file;
+};
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -90,6 +98,18 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    struct list openfiles;              /* List of files currently opened by this thread. */
+    struct file *execfile;                    /* Executable file for this thread */
+    struct list children;               /* List of child processes */
+    struct list_elem childelem;         /* List element for parent's children list */
+    int next_fd;                        /* The next file descriptor to use when opening a file. */
+    char *cmd;                          /* The command given for this thread to run */
+    struct semaphore load_sema;         /* Synch for exec */
+    struct semaphore wait_sema;         /* Synch for process_wait */
+    struct semaphore exit_sema;         /* Synch for exit */
+    int exit_status;                    /* Store own exit status */
+    int load_success;                   /* Tells the parent if executable has been loaded */
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -129,6 +149,8 @@ void thread_yield (void);
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
+
+struct thread *get_thread_by_tid (tid_t);
 
 int thread_get_priority (void);
 void thread_set_priority (int);

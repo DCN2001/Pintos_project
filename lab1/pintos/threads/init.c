@@ -133,8 +133,11 @@ main (void)
   run_actions (argv);
 
   /* Finish up. */
+  printf("run_actions done\n");
   shutdown ();
+  printf("shut down\n");
   thread_exit ();
+  printf("exit ==\n");
 }
 
 /* Clear the "BSS", a segment that should be initialized to
@@ -297,6 +300,7 @@ run_task (char **argv)
 static void
 run_actions (char **argv) 
 {
+  printf ("Executing actions: ** \n");
   /* An action. */
   struct action 
     {
@@ -323,13 +327,15 @@ run_actions (char **argv)
     {
       const struct action *a;
       int i;
-
+      printf("argv not null\n");
       /* Find action name. */
       for (a = actions; ; a++)
         if (a->name == NULL)
           PANIC ("unknown action `%s' (use -h for help)", *argv);
-        else if (!strcmp (*argv, a->name))
+        else if (!strcmp (*argv, a->name)){
+          printf("break\n");
           break;
+        }
 
       /* Check for required arguments. */
       for (i = 1; i < a->argc; i++)

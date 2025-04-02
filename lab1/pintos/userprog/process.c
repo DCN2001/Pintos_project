@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "syscall.h"
+
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -32,13 +34,20 @@ process_execute (const char *file_name)
 {
   char *fn_copy, *fn_copy2;
   tid_t tid;
+  struct thread *child = NULL;
 
+  // printf("in process_execute\n");
   /* Make a copy of FILE_NAME.
     Otherwise there's a race between the caller and load(). */
+  // printf(">>>>>>>>>>>>>>>>>>\n\n\n\n");
+  // printf("file_name: %s\n", file_name);
+  // printf("<<<<<<<<<<<<<<<<<<\n\n\n\n");
   fn_copy = malloc(strlen(file_name)+1);
   fn_copy2 = malloc(strlen(file_name)+1);
-  if (fn_copy == NULL)
+  if (fn_copy == NULL){
+    printf("fn_copy error\n");
     return TID_ERROR;
+  }
 
   strlcpy (fn_copy, file_name, strlen(file_name)+1);
   strlcpy (fn_copy2, file_name, strlen(file_name)+1);
@@ -48,13 +57,33 @@ process_execute (const char *file_name)
   char *save_ptr;
   fn_copy = strtok_r(fn_copy, " ", &save_ptr);
 
+  // printf("=================\n");
+  // printf("fn_copy: %s\n", fn_copy);
   tid = thread_create(fn_copy, PRI_DEFAULT, start_process, fn_copy2);
+  // printf("tid: %d\n", tid);
   free(fn_copy);
 
   if (tid == TID_ERROR){
+    // printf("tid error\n");
     free (fn_copy2); 
     return TID_ERROR;
+  } else{
+    child = get_thread_by_tid (tid);
   }
+
+  if (child != NULL) {
+    // printf("====\nCHILD\n");
+    list_push_back (&thread_current()->children, &child->childelem);
+    // printf(">>>>>>\n");
+    sema_down (&child->load_sema);
+    // printf("<<<<<<\n");
+    if(child->load_success == -1) {
+      // printf("load success -1\n");
+      tid = TID_ERROR;
+    }
+  }
+
+  // printf("RRRReturn tid\n");
 
   return tid;
 }
@@ -62,8 +91,63 @@ process_execute (const char *file_name)
 // lab01 Hint - This is the mainly function you have to trace.
 static void push_argument(void **esp, char *cmdline)
 {
+  char *token, *save_ptr;
+  char **tokens = palloc_get_page (0);
+  int i = 0;
+  int tokensLen = 0;
+  char *espChar;
+  uint8_t word_align = 0;
+  // printf("%#x\n",*esp);
+  // printf("\n:)))))))))))))\n"); 
+  for (token = strtok_r (cmdline, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr)) {
+    if(i == 0) {
+      thread_current()->cmd = palloc_get_page (0);
+      strlcpy(thread_current()->cmd, token, strlen(token)+1);
+    }
+    tokens[i] = token;
+    i++;
+  }
 
+  espChar = (char *) *esp;
+  /* push arguments onto the stack from right to left */
+  int j, len;
+  for (j = i; j > 0; j--) {
+    len = strlen(tokens[j-1]);
+    tokensLen += len + 1;
+    espChar -= len + 1;
+    strlcpy(espChar, tokens[j-1], len+1);
+    tokens[j-1] = espChar;
+  }
+  /* word_align */
+  tokensLen = 4 - (tokensLen % 4);
+  for (j = 0; j < tokensLen; j++) {
+    espChar--;
+    *espChar = word_align;
+  }
+  /* add zero char pointer */
+  espChar -= 4;
+  *espChar = 0;
+  /* add pointers to arguments on stack */
+  for (j = i; j > 0; j--) {
+    espChar -= 4;
+    *((int *)espChar) = (unsigned)tokens[j-1];
+  }
+  /* put argv onto the stack */
+  void *tmp = espChar;
+  espChar -= 4;
+  *((int *)espChar) = (unsigned)tmp;
+  /* put argc onto the stack */
+  espChar -= 4;
+  *espChar = i;
+  espChar -= 4;
+  *espChar = 0;
+  /* move esp to bottom of stack */
+  *esp = espChar;
+
+  palloc_free_page (tokens);
 }
+
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -71,6 +155,7 @@ static void start_process (void *file_name_)
 {
   char *file_name = file_name_;
   struct intr_frame if_;
+  struct thread *t = thread_current ();
   bool success;
 
   char *fn_copy = malloc(strlen(file_name) + 1);
@@ -86,12 +171,21 @@ static void start_process (void *file_name_)
   char *save_ptr;
   file_name = strtok_r(file_name, " ", &save_ptr);
   success = load (file_name, &if_.eip, &if_.esp);
+  // printf("success: %d\n", success);
   if(success)
   {
+    // printf("push_argument\n");
     push_argument (&if_.esp, fn_copy);
+    t->execfile = filesys_open(file_name);
+    file_deny_write(t->execfile);
+
+    sema_up (&t->load_sema);
   }else
   {
     /* If load failed, quit. */
+    // printf("load failed\n");
+    t->load_success = -1;
+    sema_up (&t->load_sema);
     thread_exit ();
   }
 
@@ -118,22 +212,99 @@ static void start_process (void *file_name_)
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
-   int
-   process_wait (tid_t child_tid UNUSED) 
-   {
-     return -1;
-   }
+int
+process_wait (tid_t child_tid UNUSED) 
+{
+  int exit_status;
+  struct thread *t = thread_current ();
+  struct thread *child = NULL;
+  struct list_elem *e;
+
+  /* Get child whose tid is tid if one exists */
+  for (e = list_begin (&t->children); e != list_end (&t->children);
+      e = list_next (e))
+    {
+      child = list_entry (e, struct thread, childelem);
+      if(child->tid == child_tid)
+        break;
+    }
+  if (e == list_end (&t->children))
+    return -1;
+  list_remove (&child->childelem);
+
+  sema_down (&child->wait_sema);
+
+  exit_status = child->exit_status;
+
+  sema_up (&child->exit_sema);
+
+  return exit_status;
+}
+
+static struct openfile *
+getFile (int fd)
+{
+  struct thread *t = thread_current ();
+  struct list_elem *e;
+  for (e = list_begin (&t->openfiles); e != list_end (&t->openfiles);
+       e = list_next (e))
+    {
+      struct openfile *of = list_entry (e, struct openfile, elem);
+      if(of->fd == fd)
+        return of;
+    }
+  return NULL;
+}
 
 /* Free the current process's resources. */
 void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  struct thread *child = NULL;
+  struct list_elem *e;
   uint32_t *pd;
+
+  struct openfile *of = NULL;
+  if(lock_held_by_current_thread(&filesys_lock))
+    lock_release (&filesys_lock);
+  
+  of = getFile (2);
+  if (of != NULL) {
+    lock_acquire (&filesys_lock);
+    file_close (of->file);
+    lock_release (&filesys_lock);
+    list_remove (&of->elem);
+    palloc_free_page (of);
+  }
+
+  if(cur->cmd != NULL)
+    printf("%s: exit(%d)\n", cur->cmd, cur->exit_status);
+
+  if (cur->execfile != NULL)
+    {
+        file_allow_write(cur->execfile);
+        file_close(cur->execfile);
+    }
+  sema_up (&cur->wait_sema);
+
+  for (e = list_begin (&cur->children); e != list_end (&cur->children);
+       e = list_next (e))
+    {
+      child = list_entry (e, struct thread, childelem);
+      sema_down (&child->wait_sema);
+      sema_up (&child->exit_sema);
+    }
+
+
+  /* wait for parent to reap */
+  sema_down (&cur->exit_sema);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
+  palloc_free_page (cur->cmd);
+
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -241,13 +412,15 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
+  // printf("in load\n");
+  // printf("*********\n");
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
   int i;
-
+  // printf("file_name: %s\n", file_name);
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
