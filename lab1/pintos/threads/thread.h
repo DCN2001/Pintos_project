@@ -98,17 +98,17 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    struct list openfiles;              /* List of files currently opened by this thread. */
-    struct file *execfile;                    /* Executable file for this thread */
-    struct list children;               /* List of child processes */
-    struct list_elem childelem;         /* List element for parent's children list */
-    int next_fd;                        /* The next file descriptor to use when opening a file. */
-    char *cmd;                          /* The command given for this thread to run */
-    struct semaphore load_sema;         /* Synch for exec */
-    struct semaphore wait_sema;         /* Synch for process_wait */
-    struct semaphore exit_sema;         /* Synch for exit */
-    int exit_status;                    /* Store own exit status */
-    int load_success;                   /* Tells the parent if executable has been loaded */
+    struct list openfiles;              
+    struct file *execfile;              
+    struct list children;               
+    struct list_elem childelem;         
+    int next_fd;                        
+    char *cmd;                          
+    struct semaphore load_sema;         
+    struct semaphore wait_sema;         
+    struct semaphore exit_sema;         
+    int exit_status;                    
+    int load_success;                   
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
