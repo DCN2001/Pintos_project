@@ -110,7 +110,7 @@ static void push_argument(void **esp, char *cmdline)
   }
 
   espChar = (char *) *esp;
-  /* push arguments onto the stack from right to left */
+
   int j, len;
   for (j = i; j > 0; j--) {
     len = strlen(tokens[j-1]);
@@ -119,30 +119,30 @@ static void push_argument(void **esp, char *cmdline)
     strlcpy(espChar, tokens[j-1], len+1);
     tokens[j-1] = espChar;
   }
-  /* word_align */
+  
   tokensLen = 4 - (tokensLen % 4);
   for (j = 0; j < tokensLen; j++) {
     espChar--;
     *espChar = word_align;
   }
-  /* add zero char pointer */
+  
   espChar -= 4;
   *espChar = 0;
-  /* add pointers to arguments on stack */
+  
   for (j = i; j > 0; j--) {
     espChar -= 4;
     *((int *)espChar) = (unsigned)tokens[j-1];
   }
-  /* put argv onto the stack */
+  
   void *tmp = espChar;
   espChar -= 4;
   *((int *)espChar) = (unsigned)tmp;
-  /* put argc onto the stack */
+  
   espChar -= 4;
   *espChar = i;
   espChar -= 4;
   *espChar = 0;
-  /* move esp to bottom of stack */
+  
   *esp = espChar;
 
   palloc_free_page (tokens);
