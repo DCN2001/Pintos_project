@@ -480,6 +480,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->exit_status = -1;
   t->load_success = 1;
+  t->waited = false;
 
   t->magic = THREAD_MAGIC;
 

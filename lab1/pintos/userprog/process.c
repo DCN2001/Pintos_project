@@ -215,28 +215,31 @@ static void start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  int exit_status;
+  int exit_status = 0;
   struct thread *t = thread_current ();
   struct thread *child = NULL;
   struct list_elem *e;
 
   /* Get child whose tid is tid if one exists */
-  for (e = list_begin (&t->children); e != list_end (&t->children);
-      e = list_next (e))
-    {
-      child = list_entry (e, struct thread, childelem);
-      if(child->tid == child_tid)
+  for (e = list_begin (&t->children); e != list_end (&t->children); e = list_next (e))
+  {
+    child = list_entry (e, struct thread, childelem);
+    if(child->tid == child_tid){
+      if (!child->waited)
+      {
+        child->waited = true;
+        sema_down (&child->wait_sema);
+        exit_status = child->exit_status;
+        sema_up (&child->exit_sema);
         break;
+      } else {
+        return -1;
+      }
     }
+  }
   if (e == list_end (&t->children))
     return -1;
   list_remove (&child->childelem);
-
-  sema_down (&child->wait_sema);
-
-  exit_status = child->exit_status;
-
-  sema_up (&child->exit_sema);
 
   return exit_status;
 }

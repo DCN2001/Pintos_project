@@ -251,7 +251,7 @@ int sys_wait(pid_t pid){
 }
 
 bool sys_create(const char *file, unsigned initial_size){
-   bool retval;
+  bool retval;
   if(valid_mem_access(file)) {
     lock_acquire (&filesys_lock);
     retval = filesys_create (file, initial_size);
@@ -406,8 +406,7 @@ getFile (int fd)
 {
   struct thread *t = thread_current ();
   struct list_elem *e;
-  for (e = list_begin (&t->openfiles); e != list_end (&t->openfiles);
-       e = list_next (e))
+  for (e = list_begin (&t->openfiles); e != list_end (&t->openfiles); e = list_next (e))
     {
       struct openfile *of = list_entry (e, struct openfile, elem);
       if(of->fd == fd)
