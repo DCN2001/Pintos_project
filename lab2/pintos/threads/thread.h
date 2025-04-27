@@ -93,7 +93,10 @@ struct thread
    /* Shared between thread.c and synch.c. */
    struct list_elem elem;              /* List element. */
 
-   int64_t blocked_t;                 /* Time to sleep. */
+   int64_t blocked_t;
+   int         base_priority;            
+   struct list locks;                  
+   struct lock *lock_waiting;          
 
 #ifdef USERPROG
    /* Owned by userprog/process.c. */
@@ -143,5 +146,9 @@ int thread_get_load_avg (void);
 void thread_wake_up (struct thread *t, void *aux UNUSED);
 
 bool priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void thread_hold_the_lock(struct lock *lock);
+void thread_donate_priority (struct thread *t);
+void thread_remove_lock (struct lock *lock);
+void thread_update_priority (struct thread *t);
 
 #endif /* threads/thread.h */
