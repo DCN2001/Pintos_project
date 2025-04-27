@@ -196,38 +196,41 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
-  struct thread *current_thread = thread_current ();
-  struct lock *l;
+  struct thread *cur = thread_current ();
+  struct lock *lock_ptr;
   enum intr_level old_level;
 
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  if (lock->holder != NULL && !thread_mlfqs)
+  if (!thread_mlfqs && lock->holder != NULL)
   {
-    current_thread->waiting_lock = lock;
-    l = lock;
-    while (l && current_thread->priority > l->max_priority)
+    cur->waiting_lock = lock;
+
+    lock_ptr = lock;
+
+    while (lock_ptr && cur->priority > lock_ptr->max_priority)
     {
-      l->max_priority = current_thread->priority;
-      donate_priority (l->holder);
-      l = l->holder->waiting_lock;
+      lock_ptr->max_priority = cur->priority;
+      donate_priority (lock_ptr->holder);
+      lock_ptr = lock_ptr->holder->waiting_lock;
     }
   }
-
+  
   sema_down (&lock->semaphore);
-
+  
   old_level = intr_disable ();
 
-  current_thread = thread_current ();
-  if (!thread_mlfqs)
-  {
-    current_thread->waiting_lock = NULL;
-    lock->max_priority = current_thread->priority;
-    hold_lock (lock);
+  cur = thread_current ();
+
+  if (!thread_mlfqs){
+    cur->waiting_lock = NULL;
+    lock->max_priority = cur->priority;
+    hold_lock(lock);
   }
-  lock->holder = current_thread;
+
+  lock->holder = cur;
 
   intr_set_level (old_level);
 }
@@ -263,8 +266,14 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!thread_mlfqs)
-    remove_lock (lock);
+  if (!thread_mlfqs) {
+    enum intr_level old_level = intr_disable ();
+
+    list_remove (&lock->elem);
+    thread_update_priority (thread_current ());
+
+    intr_set_level (old_level);
+  }
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
@@ -374,15 +383,18 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     cond_signal (cond, lock);
 }
 
-/* lock comparation function */
 bool lock_priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
-  return list_entry (a, struct lock, elem)->max_priority > list_entry (b, struct lock, elem)->max_priority;
+  struct lock *la = list_entry (a, struct lock, elem);
+  struct lock *lb = list_entry (b, struct lock, elem);
+  bool result = (la->max_priority) > (lb->max_priority);
+  return result;
 }
 
 bool cond_sema_priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
-  struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
-  struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
-  return list_entry(list_front(&sa->semaphore.waiters), struct thread, elem)->priority > list_entry(list_front(&sb->semaphore.waiters), struct thread, elem)->priority;
+  struct semaphore_elem *s1 = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *s2 = list_entry (b, struct semaphore_elem, elem);
+  bool result = (list_entry(list_front(&s1->semaphore.waiters), struct thread, elem)->priority) > (list_entry(list_front(&s2->semaphore.waiters), struct thread, elem)->priority);
+  return result;
 }

@@ -148,7 +148,6 @@ void thread_wake_up (struct thread *t, void *aux UNUSED);
 bool thread_priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 void hold_lock(struct lock *lock);
 void donate_priority (struct thread *t);
-void remove_lock (struct lock *lock);
 void thread_update_priority (struct thread *t);
 
 #endif /* threads/thread.h */
