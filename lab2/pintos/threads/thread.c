@@ -239,7 +239,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   // list_push_back (&ready_list, &t->elem);
-  list_insert_ordered (&ready_list, &t->elem, (list_less_func *) &priority_order, NULL);
+  list_insert_ordered (&ready_list, &t->elem, thread_priority_order, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -309,7 +309,7 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) list_insert_ordered (&ready_list, &cur->elem, (list_less_func *) &priority_order, NULL);
+  if (cur != idle_thread) list_insert_ordered (&ready_list, &cur->elem, thread_priority_order, NULL);
     // list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
@@ -344,7 +344,7 @@ thread_set_priority (int new_priority)
 
   struct thread *current_thread = thread_current ();
   int old_priority = current_thread->priority;
-  current_thread->base_priority = new_priority;
+  current_thread->original_priority = new_priority;
 
   if (list_empty (&current_thread->locks) || new_priority > old_priority)
   {
@@ -481,15 +481,15 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
-  t->base_priority = priority;
+  t->original_priority = priority;
   list_init (&t->locks);
-  t->lock_waiting = NULL;
+  t->waiting_lock = NULL;
 
   t->blocked_t = 0;
 
   old_level = intr_disable ();
   // list_push_back (&all_list, &t->allelem);
-  list_insert_ordered (&all_list, &t->allelem, (list_less_func *) &priority_order, NULL);
+  list_insert_ordered (&all_list, &t->allelem, thread_priority_order, NULL);
   intr_set_level (old_level);
 }
 
@@ -617,19 +617,19 @@ void thread_wake_up (struct thread *t, void *aux UNUSED)
   }
 }
 
-bool priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+bool thread_priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
   struct thread *t1 = list_entry (a, struct thread, elem);
   struct thread *t2 = list_entry (b, struct thread, elem);
-  bool is_less = (t1->priority) > (t2->priority);
-  return is_less;
+  bool result = (t1->priority) > (t2->priority);
+  return result;
 }
 
 /* Let thread hold a lock */
-void thread_hold_the_lock(struct lock *lock)
+void hold_lock(struct lock *lock)
 {
   enum intr_level old_level = intr_disable ();
-  list_insert_ordered (&thread_current ()->locks, &lock->elem, lock_cmp_priority, NULL);
+  list_insert_ordered (&thread_current ()->locks, &lock->elem, lock_priority_order, NULL);
 
   if (lock->max_priority > thread_current ()->priority)
   {
@@ -641,7 +641,7 @@ void thread_hold_the_lock(struct lock *lock)
 }
 
 /* Donate current priority to thread t. */
-void thread_donate_priority (struct thread *t)
+void donate_priority (struct thread *t)
 {
   enum intr_level old_level = intr_disable ();
   thread_update_priority (t);
@@ -649,13 +649,13 @@ void thread_donate_priority (struct thread *t)
   if (t->status == THREAD_READY)
   {
     list_remove (&t->elem);
-    list_insert_ordered (&ready_list, &t->elem, priority_order, NULL);
+    list_insert_ordered (&ready_list, &t->elem, thread_priority_order, NULL);
   }
   intr_set_level (old_level);
 }
 
 /* Remove a lock. */
-void thread_remove_lock (struct lock *lock)
+void remove_lock (struct lock *lock)
 {
   enum intr_level old_level = intr_disable ();
   list_remove (&lock->elem);
@@ -667,12 +667,12 @@ void thread_remove_lock (struct lock *lock)
 void thread_update_priority (struct thread *t)
 {
   enum intr_level old_level = intr_disable ();
-  int max_priority = t->base_priority;
+  int max_priority = t->original_priority;
   int lock_priority;
 
   if (!list_empty (&t->locks))
   {
-    list_sort (&t->locks, lock_cmp_priority, NULL);
+    list_sort (&t->locks, lock_priority_order, NULL);
     lock_priority = list_entry (list_front (&t->locks), struct lock, elem)->max_priority;
     if (lock_priority > max_priority)
       max_priority = lock_priority;

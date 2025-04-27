@@ -68,7 +68,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0)
     {
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_order, NULL);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_order, NULL);
       thread_block ();
     }
   sema->value--;
@@ -115,7 +115,7 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters))
   {
-    list_sort (&sema->waiters, priority_order, NULL);
+    list_sort (&sema->waiters, thread_priority_order, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
   }
 
@@ -206,13 +206,13 @@ lock_acquire (struct lock *lock)
 
   if (lock->holder != NULL && !thread_mlfqs)
   {
-    current_thread->lock_waiting = lock;
+    current_thread->waiting_lock = lock;
     l = lock;
     while (l && current_thread->priority > l->max_priority)
     {
       l->max_priority = current_thread->priority;
-      thread_donate_priority (l->holder);
-      l = l->holder->lock_waiting;
+      donate_priority (l->holder);
+      l = l->holder->waiting_lock;
     }
   }
 
@@ -223,9 +223,9 @@ lock_acquire (struct lock *lock)
   current_thread = thread_current ();
   if (!thread_mlfqs)
   {
-    current_thread->lock_waiting = NULL;
+    current_thread->waiting_lock = NULL;
     lock->max_priority = current_thread->priority;
-    thread_hold_the_lock (lock);
+    hold_lock (lock);
   }
   lock->holder = current_thread;
 
@@ -264,7 +264,7 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!thread_mlfqs)
-    thread_remove_lock (lock);
+    remove_lock (lock);
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
@@ -353,7 +353,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
 
   if (!list_empty (&cond->waiters))
   {
-    list_sort (&cond->waiters, cond_sema_cmp_priority, NULL);
+    list_sort (&cond->waiters, cond_sema_priority_order, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters), struct semaphore_elem, elem)->semaphore);
   }
 }
@@ -375,12 +375,12 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 }
 
 /* lock comparation function */
-bool lock_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+bool lock_priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
   return list_entry (a, struct lock, elem)->max_priority > list_entry (b, struct lock, elem)->max_priority;
 }
 
-bool cond_sema_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+bool cond_sema_priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
   struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
   struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
