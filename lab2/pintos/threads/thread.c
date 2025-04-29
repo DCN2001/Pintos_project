@@ -22,6 +22,8 @@
 
 fixed_point_number load_avg;
 
+static struct list sleep_list;
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -94,6 +96,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -617,15 +620,6 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* Check whether to wake up thread or not*/
-void thread_wake_up (struct thread *t, void *aux UNUSED)
-{
-  if (t->status == THREAD_BLOCKED && t->blocked_t > 0)
-  {
-    t->blocked_t -= 1;
-    if (t->blocked_t == 0) thread_unblock(t);
-  }
-}
 
 bool thread_priority_order (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
@@ -734,4 +728,37 @@ void thread_mlfqs_update_priority (struct thread *t)
 
   if (t->priority < PRI_MIN) t->priority = PRI_MIN;
   if (t->priority > PRI_MAX) t->priority = PRI_MAX;
+}
+
+void thread_add_current_thread_to_sleep_list (int64_t ticks)
+{
+  struct thread *cur = thread_current ();
+  cur->blocked_t = ticks;
+  list_push_back(&sleep_list, &cur->elem);
+  thread_block();
+}
+
+void thread_remove_from_sleep_list (struct thread *t)
+{
+  list_remove(&t->elem);
+  thread_unblock(t);
+}
+
+void check_sleep_list () {
+  if (list_empty (&sleep_list)) return;
+  struct list_elem *e = list_begin (&sleep_list);
+  struct thread *t;
+  
+  while (e != list_end (&sleep_list))
+  {
+    t = list_entry (e, struct thread, elem);
+    ASSERT (t->status == THREAD_BLOCKED && t->blocked_t > 0)
+    
+    t->blocked_t -= 1;
+      
+    e = list_next(e);
+    if (t->blocked_t == 0) {
+      thread_remove_from_sleep_list(t);
+    }
+  }
 }
