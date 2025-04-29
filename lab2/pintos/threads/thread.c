@@ -379,21 +379,25 @@ thread_set_nice (int nice)
 int
 thread_get_nice (void) 
 {
-  return thread_current ()->nice;
+  struct thread *cur = thread_current ();
+  return cur->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  return fixed_to_int_round (fixed_multiply_int (load_avg, 100));
+  int load_avg_percent = fixed_to_int_round (fixed_multiply_int (load_avg, 100));
+  return load_avg_percent;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return fixed_to_int_round (fixed_multiply_int (thread_current ()->recent_cpu, 100));
+  struct thread *cur = thread_current ();
+  int recent_cpu_percent = fixed_to_int_round (fixed_multiply_int (cur->recent_cpu, 100));
+  return recent_cpu_percent;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -687,10 +691,8 @@ void thread_mlfqs_increase_recent_cpu_by_one (void)
   ASSERT (thread_mlfqs);
   ASSERT (intr_context ());
 
-  struct thread *current_thread = thread_current ();
-  if (current_thread == idle_thread)
-    return;
-  current_thread->recent_cpu = fixed_add_int (current_thread->recent_cpu, 1);
+  struct thread *cur = thread_current ();
+  if (cur != idle_thread) cur->recent_cpu = fixed_add_int (cur->recent_cpu, 1);
 }
 
 /* Every per second to refresh load_avg and recent_cpu of all threads. */
@@ -699,14 +701,15 @@ void thread_mlfqs_update_load_avg_and_recent_cpu (void)
   ASSERT (thread_mlfqs);
   ASSERT (intr_context ());
 
-  size_t ready_threads = list_size (&ready_list);
-  if (thread_current () != idle_thread)
-    ready_threads++;
-  load_avg = fixed_add_fixed (fixed_divide_int (fixed_multiply_int (load_avg, 59), 60), fixed_divide_int (int_to_fixed (ready_threads), 60));
+  struct thread *cur = thread_current ();
+  size_t ready_threads_num = list_size (&ready_list);
+  if (cur != idle_thread) ready_threads_num++;
+  load_avg = fixed_add_fixed (fixed_divide_int (fixed_multiply_int (load_avg, 59), 60), fixed_divide_int (int_to_fixed (ready_threads_num), 60));
 
   struct thread *t;
   struct list_elem *e = list_begin (&all_list);
-  for (; e != list_end (&all_list); e = list_next (e))
+
+  while (e != list_end (&all_list))
   {
     t = list_entry(e, struct thread, allelem);
     if (t != idle_thread)
@@ -714,6 +717,7 @@ void thread_mlfqs_update_load_avg_and_recent_cpu (void)
       t->recent_cpu = fixed_add_int (fixed_multiply_fixed (fixed_divide_fixed (fixed_multiply_int (load_avg, 2), fixed_add_int (fixed_multiply_int (load_avg, 2), 1)), t->recent_cpu), t->nice);
       thread_mlfqs_update_priority (t);
     }
+    e = list_next (e);
   }
 }
 
@@ -727,6 +731,7 @@ void thread_mlfqs_update_priority (struct thread *t)
   ASSERT (t != idle_thread);
 
   t->priority = fixed_to_int (fixed_subtract_int (fixed_subtract_fixed (int_to_fixed (PRI_MAX), fixed_divide_int (t->recent_cpu, 4)), 2 * t->nice));
-  t->priority = t->priority < PRI_MIN ? PRI_MIN : t->priority;
-  t->priority = t->priority > PRI_MAX ? PRI_MAX : t->priority;
+
+  if (t->priority < PRI_MIN) t->priority = PRI_MIN;
+  if (t->priority > PRI_MAX) t->priority = PRI_MAX;
 }
