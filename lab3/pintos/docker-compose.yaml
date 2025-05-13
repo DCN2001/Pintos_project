@@ -7,7 +7,7 @@ services:
     stdin_open: true  
     tty: true         
     restart: no       
-    #volumes:
-    # - [your_source_code_path]:/home/pintos
+    volumes:
+      - D:\study_file\EE_OS\Lab\NTU_113-2_OS\lab3\pintos:/home/pintos
     environment:
       - PINTOS_DIR=/home/pintos
