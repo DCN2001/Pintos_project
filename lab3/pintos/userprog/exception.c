@@ -4,9 +4,9 @@
 #include <debug.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
-#include "vm/frametable.h"
+#include "vm/frame.h"
 #include "vm/pageinfo.h"
-#include "vm/growstack.h"
+#include "vm/stack.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -165,7 +165,7 @@ page_fault (struct intr_frame *f)
     thread_exit ();
   if (user)
     thread_current ()->user_esp = f->esp;
-  maybe_grow_stack (cur->pagedir, fault_addr);
+  grow_stack (cur->pagedir, fault_addr);
   if (!frametable_load_frame (cur->pagedir, pg_round_down (fault_addr), write))
     thread_exit ();
 }

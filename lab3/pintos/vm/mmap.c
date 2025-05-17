@@ -5,8 +5,8 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
-#include "vm/frametable.h"
-#include "vm/growstack.h"
+#include "vm/frame.h"
+#include "vm/stack.h"
 #include "vm/pageinfo.h"
 
 static int
@@ -29,8 +29,10 @@ int mmap (int fd, void *vaddr)
       || fd == STDOUT_FILENO || file == NULL)
     return -1;
   length = file_length (file);
+
   if (length == 0)
     return -1;
+  
   num_pages = ((size_t) pg_round_up ((const void *) length)) / PGSIZE;
   /* Do not allow mapping to the space reserved for the stack. */
   for (upage = vaddr, i = 0; i < num_pages; i++, upage += PGSIZE)

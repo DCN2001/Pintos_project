@@ -10,8 +10,8 @@
 #include "threads/vaddr.h"
 #include "threads/pte.h"
 #include "devices/shutdown.h"
-#include "vm/frametable.h"
-#include "vm/growstack.h"
+#include "vm/frame.h"
+#include "vm/stack.h"
 #include "vm/mmap.h"
 
 static void syscall_handler (struct intr_frame *);
@@ -130,11 +130,11 @@ lock_buffer (const void *buffer, off_t size, bool write)
 
   /* It's possible for buffer to be on a yet to be mapped porition of the
      stack. */
-  maybe_grow_stack (cur->pagedir, buffer);
+  grow_stack (cur->pagedir, buffer);
   for (upage = pg_round_down (buffer), i = 0; i < num_pages;
        i++, upage += PGSIZE)
     {
-      maybe_grow_stack (cur->pagedir, upage);
+      grow_stack (cur->pagedir, upage);
       if (!frametable_lock_frame (cur->pagedir, upage, write))
         break;
     }

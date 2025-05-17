@@ -627,7 +627,7 @@ setup_stack (const char *program_name, char *args, void **esp)
         }
       else
         {
-          pageinfo_destroy (page_info);
+          pageinfo_release (page_info);
           palloc_free_page (kpage);
         }
     }

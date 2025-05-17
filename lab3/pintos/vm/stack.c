@@ -2,22 +2,20 @@
 #include "threads/thread.h"
 #include "threads/pte.h"
 #include "userprog/pagedir.h"
-#include "vm/growstack.h"
+#include "vm/stack.h"
 #include "vm/pageinfo.h"
 
 /* The stack size cannot grow beyond 256K.*/
 #define MAX_STACK_SIZE (PHYS_BASE - PGSIZE * 64)
   
-/* If a user program page faults on an address that might be a stack access
-   grow the stack by mapping in a frame. */
+/* If a user program page faults on an address that might be a stack access, grow the stack by mapping in a frame. */
 void
-maybe_grow_stack (uint32_t *pd, const void *vaddr)
+grow_stack (uint32_t *pd, const void *vaddr)
 {
   struct page_info *page_info;
   void *upage = pg_round_down (vaddr);
 
-  if (pagedir_get_info (pd, upage) == NULL
-      && is_stack_access (vaddr))
+  if (pagedir_get_info (pd, upage) == NULL && is_stack_access (vaddr))
     {
       page_info = pageinfo_create ();
       if (page_info != NULL)
@@ -31,11 +29,7 @@ maybe_grow_stack (uint32_t *pd, const void *vaddr)
     }
  }
 
-/* Stack accesses happen 1 or 4 bytes below the current value of the stack
-   pointer as items are pushed on the stack.  In certain cases, the fault 
-   address lies above the stack pointer.  This occurs when the stack pointer
-   is decremented to allocate more stack and a value is written into the 
-   stack. */ 
+/* Stack accesses */ 
 bool
 is_stack_access (const void *vaddr)
 {

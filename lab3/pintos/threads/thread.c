@@ -602,7 +602,7 @@ thread_lock_released (struct lock *lock)
         e = list_remove (e);
       else
         {
-          waiting_thread = lock_get_highest_priority_waiting_thread (owned_lock);
+          waiting_thread = lock_get_highest_priority (owned_lock);
           if (waiting_thread != NULL
               && waiting_thread->priority > highest_waiting_priority)
             highest_waiting_priority = waiting_thread->priority;

@@ -97,26 +97,23 @@ filesys_remove (const char *name)
   return success;
 }
 
+/* Returns the first available file descriptor >= 2 and assigns FILE to it. Returns -1 if no slot is available. */
 static int
-allocate_fd (struct file *file)
+allocate_fd(struct file *file)
 {
-  struct thread *cur = thread_current ();
-  int fd = -1;
+  struct thread *t = thread_current();
 
-  /* Allocate the first available file descriptor. */
-  for (fd = 2; fd < MAX_OPEN_FILES; fd++)
-    if (cur->ofiles[fd] == NULL)
-      break;
-  if (fd < MAX_OPEN_FILES)
-    cur->ofiles[fd] = file;
-
-  return fd;
+  for (int fd = 2; fd < MAX_OPEN_FILES; fd++) {
+    if (t->ofiles[fd] == NULL) {
+      t->ofiles[fd] = file;
+      return fd;
+    }
+  }
+  return -1;
 }
 
-/* The following functions provide a file descriptor wrapper around 
-   the file system functionality.  The file system is not thread safe
-   so the underlying file system calls are locked to prevent simultaneous
-   use. */
+
+/* The following functions provide a file descriptor wrapper around  the file system functionality.*/
 bool
 process_file_create (const char *name, off_t initial_size)
 {
@@ -184,80 +181,65 @@ process_file_size (int fd)
   return size;
 }
 
-off_t
-process_file_read (int fd, void *buffer_, off_t size)
+off_t process_file_read(int fd, void *buf_, off_t size)
 {
-  uint8_t *buffer = buffer_;
-  struct file *file;
-  off_t bytes_read = 0;
-  uint8_t c;
+  uint8_t *buf = buf_;
+  struct file *f;
+  off_t read_bytes = 0;
 
-  if (fd == STDIN_FILENO)
-    {
-      /* Treat stdin as a special file descriptor that reads lines from the 
-         keyboard. */
-      while (bytes_read < size)
-        {
-          c = input_getc ();
-          if (c == '\n')
-            break;
-          buffer[bytes_read++] = c;
-        }
+  if (fd == STDIN_FILENO) {
+    while (read_bytes < size) {
+      uint8_t ch = input_getc();
+      if (ch == '\n')
+        break;
+      buf[read_bytes++] = ch;
     }
-  else
-    {
-      file = process_file_get_file (fd);
-      if (file != NULL)
-        {
-          lock_acquire (&filesys_lock);
-          bytes_read = file_read (file, buffer, size);
-          lock_release (&filesys_lock);
-        }
+  } else {
+    f = process_file_get_file(fd);
+    if (f != NULL) {
+      lock_acquire(&filesys_lock);
+      read_bytes = file_read(f, buf, size);
+      lock_release(&filesys_lock);
     }
+  }
 
-  return bytes_read;
+  return read_bytes;
 }
 
-off_t
-process_file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
+/* Writes SIZE bytes from BUFFER to file descriptor FD. */
+off_t process_file_write(int fd, const void *buf, off_t size)
+{
+  struct file *f;
+  off_t written = 0;
+
+  if (fd == STDOUT_FILENO) {
+    putbuf(buf, size);  // Write to console
+    written = size;
+  } else {
+    f = process_file_get_file(fd);
+    if (f != NULL) {
+      lock_acquire(&filesys_lock);
+      written = file_write(f, buf, size);
+      lock_release(&filesys_lock);
+    }
+  }
+
+  return written;
+}
+
+
+off_t process_file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 {
   off_t bytes_read;
-  
   lock_acquire (&filesys_lock);
   bytes_read = file_read_at (file, buffer, size, file_ofs);
   lock_release (&filesys_lock);
-  
   return bytes_read;
 }
 
-off_t
-process_file_write (int fd, const void *buffer, off_t size)
-{
-  struct file *file;
-  off_t bytes_written = 0;
 
-  if (fd == STDOUT_FILENO)
-    {
-      /* Treat stdout as a special file descriptor that writes to the console. */
-      putbuf (buffer, size);
-      bytes_written = size;
-    }
-  else
-    {
-      file = process_file_get_file (fd);
-      if (file != NULL)
-        {
-          lock_acquire (&filesys_lock);
-          bytes_written = file_write (file, buffer, size);
-          lock_release (&filesys_lock);
-        }
-    }
-    
-  return bytes_written;
-}
 
-off_t
-process_file_write_at (struct file *file, const void *buffer, off_t size,
+off_t process_file_write_at (struct file *file, const void *buffer, off_t size,
                        off_t file_ofs)
 {
   off_t bytes_written;

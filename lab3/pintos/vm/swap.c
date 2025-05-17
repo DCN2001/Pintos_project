@@ -56,22 +56,21 @@ swap_release (block_sector_t sector)
   swap_map_release (sector);
 }
 
-/* Allocates a page size chunk of consecutive sectors and stores the first
-   into *SECTORP.  Returns true if successful, false if not enough sectors 
-   are left. */
+/* Allocates one page worth of sectors and stores the starting sector in *sectorp. Returns true on success, false if no free sectors are available. */
 static bool
-swap_map_allocate (block_sector_t *sectorp)
+swap_map_allocate(block_sector_t *sectorp)
 {
-  block_sector_t sector = bitmap_scan_and_flip (swap_map, 0, 1, false);
-  if (sector != BITMAP_ERROR)
-    *sectorp = sector * SECTORS_PER_PAGE;
-  return sector != BITMAP_ERROR;  
+  block_sector_t index = bitmap_scan_and_flip(swap_map, 0, 1, false);
+  if (index != BITMAP_ERROR)
+    *sectorp = index * SECTORS_PER_PAGE;
+  return index != BITMAP_ERROR;
 }
 
-/* Makes a page size chunk of sectors starting at SECTOR available for use. */
+/* Frees the page-aligned sector block starting at SECTOR. */
 static void
-swap_map_release (block_sector_t sector)
+swap_map_release(block_sector_t sector)
 {
-  ASSERT (bitmap_all (swap_map, sector / SECTORS_PER_PAGE, 1));
-  bitmap_set_multiple (swap_map, sector / SECTORS_PER_PAGE, 1, false);  
+  size_t idx = sector / SECTORS_PER_PAGE;
+  ASSERT(bitmap_all(swap_map, idx, 1));
+  bitmap_set_multiple(swap_map, idx, 1, false);
 }

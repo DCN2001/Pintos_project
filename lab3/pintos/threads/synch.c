@@ -76,8 +76,6 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      /* It makes no sense to do an ordered insert as the priority of
-         the waiting thread can change at any time due to priority donation. */
       list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
@@ -136,7 +134,7 @@ sema_up (struct semaphore *sema)
 }
 
 static struct thread *
-sema_get_highest_priority_waiting_thread (struct semaphore *sema)
+sema_get_highest_priority (struct semaphore *sema)
 {
   struct list_elem *e;
   
@@ -290,12 +288,12 @@ lock_get_holder (struct lock *lock)
 }
 
 struct thread *
-lock_get_highest_priority_waiting_thread (struct lock *lock)
+lock_get_highest_priority(struct lock *lock)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (lock != NULL);
 
-  return sema_get_highest_priority_waiting_thread (&lock->semaphore);
+  return sema_get_highest_priority (&lock->semaphore);
 }
 
 /* Returns true if the current thread holds LOCK, false

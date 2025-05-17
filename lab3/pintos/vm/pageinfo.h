@@ -20,7 +20,7 @@
 struct file;
 
 struct page_info *pageinfo_create (void);
-void pageinfo_destroy (struct page_info *page_info);
+void pageinfo_release (struct page_info *page_info);
 void pageinfo_set_upage (struct page_info *page_info, const void *upage);
 void pageinfo_set_type (struct page_info *page_info, int type);
 void pageinfo_set_writable (struct page_info *page_info, int writable);
