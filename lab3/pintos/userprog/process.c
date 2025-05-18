@@ -18,7 +18,7 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "vm/pageinfo.h"
+#include "vm/page.h"
 #include "vm/mmap.h"
 
 /* Maximum size of program arguments. */

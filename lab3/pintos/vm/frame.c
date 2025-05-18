@@ -5,7 +5,7 @@
 #include <debug.h>
 #include <string.h>
 #include "userprog/pagedir.h"
-#include "vm/pageinfo.h"
+#include "vm/page.h"
 #include "vm/frame.h"
 #include "vm/swap.h"
 #include "threads/palloc.h"
@@ -16,12 +16,7 @@
 #include "filesys/inode.h"
 #include "filesys/filesys.h"
 
-/* Represents information about a file-backed page, including the file pointer and offset. */
-struct file_info
-{
-  struct file *file;  // File backing the page
-  off_t end_offset;   // End offset for the mapped region
-};
+
 /* Compute the page-aligned start offset from an end offset. */
 static inline off_t offset (off_t end_offset)
 {
@@ -33,28 +28,6 @@ static inline off_t size (off_t end_offset)
   return end_offset - offset (end_offset);
 }
 
-/* Metadata for a virtual page in user memory. */
-struct page_info
-{
-  uint8_t type;
-  uint8_t writable;
-  /* The page directory that is mapping the page. */
-  uint32_t *pd;
-  /* The user virtual page address corresponding to the page. */
-  const void *upage;
-  /* If true the page is swapped and its contents can be read back from swap_sector. */
-  bool swapped;
-  /* Information about the frame backing the page. */
-  struct frame *frame;
-  union
-  {
-    struct file_info file_info; // File-related info if file-backed
-    block_sector_t swap_sector; // Swap block index if swapped
-    const void *kpage;        // Kernel virtual address if page is preloaded
-  } data;
-  /* List element for the associated frame's page_info_list. */
-  struct list_elem elem;
-};
 
 /* Information associated with each frame. */
 struct frame
@@ -85,59 +58,6 @@ static void *evict_frame (void);
 static void *get_frame_to_evict (void);
 static unsigned frame_hash (const struct hash_elem *e, void *aux UNUSED);
 static bool frame_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
-
-struct page_info *
-pageinfo_create (void)
-{
-  struct page_info *page_info;
-  
-  page_info = calloc (1, sizeof *page_info);
-  return page_info;
-}
-
-void
-pageinfo_release (struct page_info *page_info)
-{
-  free (page_info);
-}
-
-void
-pageinfo_set_upage (struct page_info *page_info, const void *upage)
-{
-  page_info->upage = upage;
-}
-
-void
-pageinfo_set_type (struct page_info *page_info, int type)
-{
-  page_info->type = type;
-}
-
-void
-pageinfo_set_writable (struct page_info *page_info, int writable)
-{
-  page_info->writable = writable;
-}
-
-void
-pageinfo_set_pagedir (struct page_info *page_info, uint32_t *pd)
-{
-  page_info->pd = pd;
-}
-
-void
-pageinfo_set_fileinfo (struct page_info *page_info, struct file *file,
-                       off_t end_offset)
-{
-  page_info->data.file_info.file = file;
-  page_info->data.file_info.end_offset = end_offset;
-}
-
-void
-pageinfo_set_kpage (struct page_info *page_info, const void *kpage)
-{
-  page_info->data.kpage = kpage;
-}
 
 void
 frametable_init (void)

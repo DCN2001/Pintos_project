@@ -3,7 +3,7 @@
 #include "threads/pte.h"
 #include "userprog/pagedir.h"
 #include "vm/stack.h"
-#include "vm/pageinfo.h"
+#include "vm/page.h"
 
 /* The stack size cannot grow beyond 256K.*/
 #define MAX_STACK_SIZE (PHYS_BASE - PGSIZE * 64)

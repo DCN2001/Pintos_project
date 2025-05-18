@@ -5,7 +5,7 @@
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
-#include "vm/pageinfo.h"
+#include "vm/page.h"
 #include "vm/frame.h"
 
 static uint32_t *active_pd (void);

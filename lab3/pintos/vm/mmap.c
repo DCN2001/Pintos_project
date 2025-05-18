@@ -7,7 +7,7 @@
 #include "userprog/pagedir.h"
 #include "vm/frame.h"
 #include "vm/stack.h"
-#include "vm/pageinfo.h"
+#include "vm/page.h"
 
 static int
 allocate_md (void *upage, struct file *file, size_t num_pages);
