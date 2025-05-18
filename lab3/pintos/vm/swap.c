@@ -13,8 +13,7 @@ struct block *swap_device;
 /* Free map, one bit per page size sector chunk. */
 static struct bitmap *swap_map;  
 
-void
-swap_init(void)
+void swap_init(void)
 {
   ASSERT (PGSIZE % BLOCK_SECTOR_SIZE == 0);
   swap_device = block_get_role (BLOCK_SWAP);
@@ -24,8 +23,7 @@ swap_init(void)
 }
 
 /* Writes a page to swap. */
-block_sector_t
-swap_write (void *kpage)
+block_sector_t swap_write (void *kpage)
 {
   int i;
   block_sector_t sector;
@@ -39,8 +37,7 @@ swap_write (void *kpage)
 }
 
 /* Reads a page from swap. */
-void
-swap_read (block_sector_t sector, void *kpage)
+void swap_read (block_sector_t sector, void *kpage)
 {
   int i;
   
@@ -50,15 +47,13 @@ swap_read (block_sector_t sector, void *kpage)
 }
 
 /* Releases a swap sector so it can be reused. */
-void
-swap_release (block_sector_t sector)
+void swap_release (block_sector_t sector)
 {
   swap_map_release (sector);
 }
 
 /* Allocates one page worth of sectors and stores the starting sector in *sectorp. Returns true on success, false if no free sectors are available. */
-static bool
-swap_map_allocate(block_sector_t *sectorp)
+static bool swap_map_allocate(block_sector_t *sectorp)
 {
   block_sector_t index = bitmap_scan_and_flip(swap_map, 0, 1, false);
   if (index != BITMAP_ERROR)
@@ -67,8 +62,7 @@ swap_map_allocate(block_sector_t *sectorp)
 }
 
 /* Frees the page-aligned sector block starting at SECTOR. */
-static void
-swap_map_release(block_sector_t sector)
+static void swap_map_release(block_sector_t sector)
 {
   size_t idx = sector / SECTORS_PER_PAGE;
   ASSERT(bitmap_all(swap_map, idx, 1));

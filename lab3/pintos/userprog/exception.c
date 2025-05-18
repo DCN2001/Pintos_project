@@ -128,7 +128,6 @@ kill (struct intr_frame *f)
 static void
 page_fault (struct intr_frame *f) 
 {
-  struct thread *cur = thread_current ();
   /*bool not_present;*/  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
@@ -165,11 +164,12 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
   */
+  struct thread *cur = thread_current ();
   if (!is_user_vaddr (fault_addr))
-    thread_exit ();
+   thread_exit ();
   if (user)
-    thread_current ()->user_esp = f->esp;
+   cur->user_esp = f->esp;
   grow_stack (cur->pagedir, fault_addr);
   if (!frametable_load_frame (cur->pagedir, pg_round_down (fault_addr), write))
-    thread_exit ();
+   thread_exit ();
 }

@@ -28,19 +28,6 @@ static inline off_t size (off_t end_offset)
   return end_offset - offset (end_offset);
 }
 
-
-/* Information associated with each frame. */
-struct frame
-{
-  void *kpage;                  // Kernel virtual address for this frame
-  struct list page_info_list;   // List of all page_infos sharing this frame
-  unsigned short lock;          // Lock count to prevent eviction
-  bool io;                      // Whether I/O is in progress for this frame
-  struct condition io_done;     // Condition variable for I/O completion
-  struct hash_elem hash_elem;   // For insertion into read-only cache
-  struct list_elem list_elem;   // Element in global frame list
-};
-
 /* Global state for managing physical frames. */
 static struct lock frame_lock;          // Lock to protect frame table operations
 static struct hash read_only_frames;    // Cache for shared, read-only file-backed pages
@@ -48,20 +35,18 @@ static struct list frame_list;          // List of frames in use
 static struct list_elem *clock_hand;    // Pointer for clock replacement algorithm
 
 // Function declarations
-static void frame_init (struct frame *frame);
-static struct frame *allocate_frame (void);
-static bool load_frame (uint32_t *pd, const void *upage, bool write, bool keep_locked);
-static void map_page (struct page_info *page_info, struct frame *frame, const void *upage);
-static void wait_for_io_done (struct frame **frame);
-static struct frame *lookup_read_only_frame (struct page_info *page_info);
-static void *evict_frame (void);
-static void *get_frame_to_evict (void);
+static void     frame_init (struct frame *frame);
+static struct   frame *allocate_frame (void);
+static bool     load_frame (uint32_t *pd, const void *upage, bool write, bool keep_locked);
+static void     map_page (struct page_info *page_info, struct frame *frame, const void *upage);
+static void     wait_for_io_done (struct frame **frame);
+static struct   frame *lookup_read_only_frame (struct page_info *page_info);
+static void    *evict_frame (void);
+static void    *get_frame_to_evict (void);
 static unsigned frame_hash (const struct hash_elem *e, void *aux UNUSED);
-static bool frame_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
+static bool     frame_less (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
 
-void
-frametable_init (void)
-{
+void frametable_init (void){
   lock_init (&frame_lock);
   list_init (&frame_list);
   clock_hand = list_end (&frame_list);
@@ -69,15 +54,12 @@ frametable_init (void)
 }
 
 /* Reads data into a frame & maps the user virtual page UPAGE to it.*/
-bool
-frametable_load_frame(uint32_t *pd, const void *upage, bool write)
-{
+bool frametable_load_frame(uint32_t *pd, const void *upage, bool write) {
   return load_frame (pd, upage, write, false);
 }
 
 /* Unmap a frame and release all associated resources. Write back to file if modified. */
-void
-frametable_unload_frame(uint32_t *pd, const void *upage) {
+void frametable_unload_frame(uint32_t *pd, const void *upage) {
   ASSERT(is_user_vaddr(upage));
   struct page_info *pi = pagedir_get_info(pd, upage);
   if (!pi) return;
@@ -140,16 +122,14 @@ frametable_unload_frame(uint32_t *pd, const void *upage) {
 
 /* Identical to frametale_load_frame with the exception that,
    upon return, the frame is locked to prevent it from being evicted. */
-bool
-frametable_lock_frame(uint32_t *pd, const void *upage, bool write)
+bool frametable_lock_frame(uint32_t *pd, const void *upage, bool write)
 {
   return load_frame (pd, upage, write, true);
 }
 
 /* Unlocks a frame that was locked with frametable_lock_frame.  NOTE:
    the frame is not unloaded, only unlocked. */
-void
-frametable_unlock_frame(uint32_t *pd, const void *upage)
+void frametable_unlock_frame(uint32_t *pd, const void *upage)
 {
   struct page_info *page_info;
   
@@ -163,8 +143,7 @@ frametable_unlock_frame(uint32_t *pd, const void *upage)
   lock_release (&frame_lock);
 }
 
-static bool
-load_frame (uint32_t *pd, const void *upage, bool write, bool keep_locked)
+static bool load_frame (uint32_t *pd, const void *upage, bool write, bool keep_locked)
 {
   struct page_info *pi;
   struct file_info *fi;
@@ -245,15 +224,13 @@ load_frame (uint32_t *pd, const void *upage, bool write, bool keep_locked)
 }
 
 
-static void
-frame_init (struct frame *frame)
+static void frame_init (struct frame *frame)
 {
   list_init (&frame->page_info_list);
   cond_init (&frame->io_done);
 }
 
-static struct frame *
-allocate_frame (void)
+static struct frame *allocate_frame (void)
 {
   struct frame *frame;
   void *kpage;
@@ -284,9 +261,7 @@ allocate_frame (void)
   return frame;
 }
 
-static void
-map_page (struct page_info *page_info, struct frame *frame, const void *upage)
-{
+static void map_page (struct page_info *page_info, struct frame *frame, const void *upage){
   page_info->frame = frame;
   list_push_back (&frame->page_info_list, &page_info->elem);
   pagedir_set_page (page_info->pd, upage, frame->kpage,
@@ -295,16 +270,14 @@ map_page (struct page_info *page_info, struct frame *frame, const void *upage)
   pagedir_set_accessed (page_info->pd, upage, true);
 }
 
-static void
-wait_for_io_done (struct frame **frame)
+static void wait_for_io_done (struct frame **frame)
 {
   while (*frame != NULL && (*frame)->io)
     cond_wait (&(*frame)->io_done, &frame_lock);
 }
 
 /* Evicts and returns a free frame. */
-static void *
-evict_frame (void)
+static void * evict_frame (void)
 {
   struct frame *f;
   struct page_info *pi;
@@ -377,8 +350,7 @@ evict_frame (void)
 
 
 /* Implementation of the clock page replacement algorithm. */ 
-static void *
-get_frame_to_evict (void)
+static void * get_frame_to_evict (void)
 {
   struct frame *cur, *start, *victim = NULL;
   struct page_info *pi;
@@ -427,8 +399,7 @@ get_frame_to_evict (void)
 }
 
 
-static struct frame *
-lookup_read_only_frame (struct page_info *page_info)
+static struct frame * lookup_read_only_frame (struct page_info *page_info)
 {
   struct frame frame;
   struct hash_elem *e;
@@ -439,8 +410,7 @@ lookup_read_only_frame (struct page_info *page_info)
   return e != NULL ? hash_entry (e, struct frame, hash_elem) : NULL;
 }
 
-static unsigned
-frame_hash (const struct hash_elem *e, void *aux UNUSED)
+static unsigned frame_hash (const struct hash_elem *e, void *aux UNUSED)
 {
   struct frame *frame = hash_entry (e, struct frame, hash_elem);
   struct page_info *page_info;
@@ -456,9 +426,7 @@ frame_hash (const struct hash_elem *e, void *aux UNUSED)
                   sizeof page_info->data.file_info.end_offset);
 }
 
-static bool
-frame_less (const struct hash_elem *a_, const struct hash_elem *b_,
-            void *aux UNUSED)
+static bool frame_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED)
 {
   struct frame *frame_a = hash_entry (a_, struct frame, hash_elem);
   struct frame *frame_b = hash_entry (b_, struct frame, hash_elem);

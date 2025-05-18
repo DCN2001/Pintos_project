@@ -7,4 +7,4 @@
 bool is_stack_access (const void *vaddr);
 void grow_stack (uint32_t *pd, const void *vaddr);
 
-#endif /* vm/stack.h */
+#endif

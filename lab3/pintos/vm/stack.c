@@ -9,8 +9,7 @@
 #define MAX_STACK_SIZE (PHYS_BASE - PGSIZE * 64)
   
 /* If a user program page faults on an address that might be a stack access, grow the stack by mapping in a frame. */
-void
-grow_stack (uint32_t *pd, const void *vaddr)
+void grow_stack (uint32_t *pd, const void *vaddr)
 {
   struct page_info *page_info;
   void *upage = pg_round_down (vaddr);
@@ -30,12 +29,10 @@ grow_stack (uint32_t *pd, const void *vaddr)
  }
 
 /* Stack accesses */ 
-bool
-is_stack_access (const void *vaddr)
+bool is_stack_access (const void *vaddr)
 {
-  void *esp = thread_current ()->user_esp;
+  struct thread *cur = thread_current ();
+  void *esp = cur->user_esp;
 
-  return (vaddr >= MAX_STACK_SIZE
-    && ((esp - vaddr) == 8 || (esp - vaddr) == 32
-        || vaddr >= esp));
+  return (vaddr >= MAX_STACK_SIZE && ((esp - vaddr) == 8 || (esp - vaddr) == 32 || vaddr >= esp));
 }

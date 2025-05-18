@@ -36,9 +36,9 @@ struct page_info
   struct frame *frame;
   union
   {
-    struct file_info file_info; // File-related info if file-backed
-    block_sector_t swap_sector; // Swap block index if swapped
-    const void *kpage;        // Kernel virtual address if page is preloaded
+    struct file_info file_info;     // File-related info if file-backed
+    block_sector_t swap_sector;     // Swap block index if swapped
+    const void *kpage;              // Kernel virtual address if page is preloaded
   } data;
   /* List element for the associated frame's page_info_list. */
   struct list_elem elem;
@@ -53,4 +53,4 @@ void pageinfo_set_pagedir (struct page_info *page_info, uint32_t *pd);
 void pageinfo_set_fileinfo (struct page_info *page_info, struct file *file, off_t offset_cnt);
 void pageinfo_set_kpage (struct page_info *page_info, const void *kpage);
 
-#endif /* vm/page.h */
+#endif
