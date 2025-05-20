@@ -8,12 +8,9 @@
 #include <list.h>
 
 /* Page types. */
-/* Page content is zero. */
-#define PAGE_TYPE_ZERO    0x01
-/* Page content is loaded from a page size chunk of kernel memory. */
-#define PAGE_TYPE_KERNEL  0x02
-/* Page is backed by a file. */
-#define PAGE_TYPE_FILE    0x04
+#define PAGE_TYPE_ZERO    0x01      // Page content is zero.
+#define PAGE_TYPE_KERNEL  0x02      // Page content is loaded from a page size chunk of kernel memory.
+#define PAGE_TYPE_FILE    0x04      // Page is backed by a file.
 
 /* If a page is writable, it will be written back to a file or to swap. */
 #define WRITABLE_TO_FILE  0x01
@@ -26,21 +23,17 @@ struct page_info
 {
   uint8_t type;
   uint8_t writable;
-  /* The page directory that is mapping the page. */
-  uint32_t *pd;
-  /* The user virtual page address corresponding to the page. */
-  const void *upage;
-  /* If true the page is swapped and its contents can be read back from swap_sector. */
-  bool swapped;
-  /* Information about the frame backing the page. */
-  struct frame *frame;
+  uint32_t *pd;                     // The page directory that is mapping the page.
+  const void *upage;                // The user virtual page address corresponding to the page.
+  bool swapped;                     // If true the page is swapped and its contents can be read back from swap_sector.
+  struct frame *frame;              // Information about the frame backing the page.
   union
   {
     struct file_info file_info;     // File-related info if file-backed
     block_sector_t swap_sector;     // Swap block index if swapped
     const void *kpage;              // Kernel virtual address if page is preloaded
   } data;
-  /* List element for the associated frame's page_info_list. */
+
   struct list_elem elem;
 };
 

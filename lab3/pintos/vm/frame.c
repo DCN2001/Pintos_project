@@ -264,8 +264,7 @@ static struct frame *allocate_frame (void)
 static void map_page (struct page_info *page_info, struct frame *frame, const void *upage){
   page_info->frame = frame;
   list_push_back (&frame->page_info_list, &page_info->elem);
-  pagedir_set_page (page_info->pd, upage, frame->kpage,
-                    page_info->writable != 0);
+  pagedir_set_page (page_info->pd, upage, frame->kpage, page_info->writable != 0);
   pagedir_set_dirty (page_info->pd, upage, false);
   pagedir_set_accessed (page_info->pd, upage, true);
 }
@@ -365,13 +364,11 @@ static void * get_frame_to_evict (void)
     accessed = false;
     ASSERT (!list_empty (&cur->page_info_list));
 
-    for (e = list_begin (&cur->page_info_list);
-         e != list_end (&cur->page_info_list); e = list_next (e))
-      {
-        pi = list_entry (e, struct page_info, elem);
-        accessed |= pagedir_is_accessed (pi->pd, pi->upage);
-        pagedir_set_accessed (pi->pd, pi->upage, false);
-      }
+    for (e = list_begin (&cur->page_info_list); e != list_end (&cur->page_info_list); e = list_next (e)){
+      pi = list_entry (e, struct page_info, elem);
+      accessed |= pagedir_is_accessed (pi->pd, pi->upage);
+      pagedir_set_accessed (pi->pd, pi->upage, false);
+    }
 
     if (!accessed && cur->lock == 0)
       victim = cur;
@@ -383,17 +380,16 @@ static void * get_frame_to_evict (void)
 
   } while (!victim && cur != start);
 
-  if (victim == NULL)
-    {
-      ASSERT (cur == start);
-      if (cur->lock > 0)
-        PANIC ("no frame available for eviction");
+  if (victim == NULL) {
+    ASSERT (cur == start);
+    if (cur->lock > 0)
+      PANIC ("no frame available for eviction");
 
-      victim = cur;
-      clock_hand = list_next (clock_hand);
-      if (clock_hand == list_end (&frame_list))
-        clock_hand = list_begin (&frame_list);
-    }
+    victim = cur;
+    clock_hand = list_next (clock_hand);
+    if (clock_hand == list_end (&frame_list))
+      clock_hand = list_begin (&frame_list);
+  }
 
   return victim;
 }
